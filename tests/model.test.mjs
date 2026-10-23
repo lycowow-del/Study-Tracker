@@ -1,0 +1,16 @@
+import { readFileSync } from 'fs';
+import assert from 'assert';
+import { buildTree, progress, COUNTED } from '../js/model.js';
+const items = JSON.parse(readFileSync(new URL('../data/far-index.json', import.meta.url)));
+assert(items.length > 90, 'seed size');
+assert.equal(new Set(items.map(i => i.id)).size, items.length, 'ids unique');
+for (const i of items) for (const k of ['id', 'topic', 'group', 'name', 'status']) assert(i[k], `missing ${k} on ${i.id}`);
+assert(items.every(i => ['Core', 'Optional', 'Visitor', 'Gap', 'Reserved'].includes(i.status)), 'statuses');
+const none = progress(items, () => false), all = progress(items, () => true);
+assert.equal(none.done, 0); assert(none.total > 0);
+assert.equal(all.done, all.total); assert.equal(all.pct, 100);
+assert.equal(items.filter(i => COUNTED.has(i.status)).length, none.total, 'reserved/optional not counted');
+const five = new Set(items.filter(i => COUNTED.has(i.status)).slice(0, 5).map(i => i.id));
+assert.equal(progress(items, id => five.has(id)).done, 5);
+assert(buildTree(items).size >= 10, 'topics');
+console.log('PASS: model tests', { items: items.length, counted: none.total, topics: buildTree(items).size });
