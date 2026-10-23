@@ -1,5 +1,5 @@
-import { seedNodes, SUBJECTS, DEFAULT_FLAGS, DEFAULT_SCREEN } from './model.js';
-const NAME = 'cpale-tracker', VERSION = 3;
+import { seedNodes, SUBJECTS, DEFAULT_FLAGS, DEFAULT_SCREEN, DEFAULT_TYPES, DEFAULT_ERRCATS } from './model.js';
+const NAME = 'cpale-tracker', VERSION = 4;
 // Ordered migrations: each adds structure only and never deletes user data.
 const MIGRATIONS = { 1: db => {
   db.createObjectStore('meta', { keyPath: 'key' });
@@ -7,8 +7,9 @@ const MIGRATIONS = { 1: db => {
   db.createObjectStore('progress', { keyPath: 'id' });
   db.createObjectStore('errorLog', { keyPath: 'id', autoIncrement: true });
 },
-2: db => { for (const n of ['subjects', 'nodes', 'flags', 'rounds', 'screenings']) db.createObjectStore(n, { keyPath: 'id' }); },
-3: db => { for (const n of ['rounds', 'screenings']) db.createObjectStore(n, { keyPath: 'id' }); } };
+2: db => { for (const n of ['subjects', 'nodes', 'flags', 'rounds', 'screenings', 'assessments', 'assessmentRows']) db.createObjectStore(n, { keyPath: 'id' }); },
+3: db => { for (const n of ['rounds', 'screenings']) db.createObjectStore(n, { keyPath: 'id' }); },
+4: db => { for (const n of ['assessments', 'assessmentRows']) db.createObjectStore(n, { keyPath: 'id' }); } };
 let db;
 const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const st = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
@@ -32,6 +33,21 @@ export const putMany = (n, arr) => new Promise((res, rej) => {
   arr.forEach(v => s.put(v)); t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error);
 });
 export const screenCfg = async () => ({ ...DEFAULT_SCREEN, ...((await get('settings', 'screening')) || {}) });
+export const assessTypes = async () => ((await get('settings', 'assessTypes')) || { value: DEFAULT_TYPES }).value;
+export const errCats = async () => ((await get('settings', 'errCats')) || { value: DEFAULT_ERRCATS }).value;
+const twoStores = (fn) => new Promise((res, rej) => {
+  const t = db.transaction(['assessments', 'assessmentRows'], 'readwrite');
+  fn(t.objectStore('assessments'), t.objectStore('assessmentRows'));
+  t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error);
+});
+export async function saveAssessment(a, rows) {
+  const old = (await all('assessmentRows')).filter(r => r.assessmentId === a.id);
+  await twoStores((sa, sr) => { old.forEach(r => sr.delete(r.id)); sa.put(a); rows.forEach(r => sr.put(r)); });
+}
+export async function purgeAssessment(id) {
+  const old = (await all('assessmentRows')).filter(r => r.assessmentId === id);
+  await twoStores((sa, sr) => { old.forEach(r => sr.delete(r.id)); sa.delete(id); });
+}
 // One-time, idempotent seed of FAR + subjects + flags (deterministic ids; never touches progress).
 export async function seed() {
   if (await get('meta', 'seeded2')) return;
@@ -51,6 +67,6 @@ export async function logError(e, ctx = '') {
 }
 export async function exportAll() {
   const o = { app: 'cpale-tracker', exportedAt: new Date().toISOString() };
-  for (const n of ['meta', 'settings', 'progress', 'errorLog', 'subjects', 'nodes', 'flags', 'rounds', 'screenings']) o[n] = await all(n);
+  for (const n of ['meta', 'settings', 'progress', 'errorLog', 'subjects', 'nodes', 'flags', 'rounds', 'screenings', 'assessments', 'assessmentRows']) o[n] = await all(n);
   return o;
 }

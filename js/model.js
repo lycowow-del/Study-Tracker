@@ -99,3 +99,54 @@ export function allocate(rows, hours, strongFrom) {
   const w = rows.map(r => Math.max(0, strongFrom - r.score) * r.size), sum = w.reduce((a, b) => a + b, 0);
   return new Map(rows.map((r, i) => [r.id, hours > 0 && sum > 0 ? hours * w[i] / sum : 0]));
 }
+
+// ---- Package 4: assessments ----
+export const DEFAULT_TYPES = [{ id: 't-quiz', name: 'School/RC quiz' }, { id: 't-preboard', name: 'Pre-board / mock exam' }, { id: 't-practice', name: 'Practice set' }, { id: 't-drill', name: 'Theory/problem-solving drill' }];
+export const DEFAULT_ERRCATS = [{ id: 'e-concept', name: 'Concept gap' }, { id: 'e-calc', name: 'Computation or careless error' }, { id: 'e-misread', name: 'Misread the question' }, { id: 'e-time', name: 'Ran out of time' }];
+// A breakdown row is {mode:'count', correct, total, unanswered} or {mode:'pct', pct}.
+export function validateRow(r) {
+  if (r.mode === 'pct') {
+    const s = String(r.pct ?? '').trim();
+    if (!/^\d+(\.\d+)?$/.test(s) || Number(s) > 100) return { ok: false, msg: 'Percentage must be between 0 and 100.' };
+    return { ok: true, row: { mode: 'pct', pct: Number(s) } };
+  }
+  const un = String(r.unanswered ?? '').trim() === '' ? '0' : String(r.unanswered).trim();
+  const v = validateEntry(r.correct, r.total);
+  if (!v.ok) return v;
+  if (!/^\d+$/.test(un)) return { ok: false, msg: 'Enter whole numbers only.' };
+  if (v.correct + Number(un) > v.total) return { ok: false, msg: 'Correct plus unanswered cannot exceed total.' };
+  return { ok: true, row: { mode: 'count', correct: v.correct, total: v.total, unanswered: Number(un) } };
+}
+export function rowStats(r) {
+  if (r.mode === 'pct') return { score: r.pct, accuracy: null, n: null };
+  const att = r.total - (r.unanswered || 0);
+  return { score: 100 * r.correct / r.total, accuracy: att > 0 ? 100 * r.correct / att : null, n: r.total, incorrect: r.total - r.correct - (r.unanswered || 0) };
+}
+// Question-weighted overall from count rows only; percentage-only rows (n unknown) are excluded unless they are all there is.
+export function overall(rows) {
+  const cr = rows.filter(r => r.mode !== 'pct'), pr = rows.filter(r => r.mode === 'pct');
+  const C = cr.reduce((a, r) => a + r.correct, 0), T = cr.reduce((a, r) => a + r.total, 0), U = cr.reduce((a, r) => a + (r.unanswered || 0), 0);
+  const out = { C, T, U, incorrect: T - C - U, nUnknown: pr.length };
+  if (T > 0) { out.mode = 'weighted'; out.score = 100 * C / T; out.accuracy = T - U > 0 ? 100 * C / (T - U) : null; }
+  else if (pr.length) { out.mode = 'unweighted'; out.score = pr.reduce((a, r) => a + r.pct, 0) / pr.length; out.accuracy = null; }
+  else { out.mode = 'none'; out.score = null; out.accuracy = null; }
+  return out;
+}
+export function validateAssessment(d, rows, ec) {
+  if (!String(d.name || '').trim()) return { ok: false, msg: 'Enter a name.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || '')) return { ok: false, msg: 'Enter a valid date.' };
+  if (!rows.length) return { ok: false, msg: 'Add at least one subtopic to the breakdown.' };
+  if (new Set(rows.map(r => r.groupId)).size !== rows.length) return { ok: false, msg: 'A subtopic appears twice.' };
+  const m = String(d.minutes ?? '').trim(); if (m !== '' && !(Number(m) >= 0)) return { ok: false, msg: 'Minutes must be a number of 0 or more.' };
+  const e = String(d.expected ?? '').trim(); if (e !== '' && !(Number(e) >= 0 && Number(e) <= 100)) return { ok: false, msg: 'Expected score must be between 0 and 100.' };
+  const ov = overall(rows), errs = Object.values(ec).reduce((a, b) => a + b, 0);
+  if (ov.mode === 'weighted' && errs > ov.incorrect + ov.U) return { ok: false, msg: `Error counts (${errs}) exceed the wrong or unanswered questions (${ov.incorrect + ov.U}).` };
+  return { ok: true };
+}
+export const signature = (a, rows) => [a.subject, String(a.name || '').trim().toLowerCase(), a.date,
+  ...[...rows].sort((x, y) => x.groupId < y.groupId ? -1 : 1).map(r => r.mode === 'pct' ? `${r.groupId}:p${r.pct}` : `${r.groupId}:${r.correct}/${r.total}/${r.unanswered || 0}`)].join('|');
+export function attemptInfo(subject, name, list) {
+  const n = String(name || '').trim().toLowerCase();
+  const prior = n ? list.filter(a => a.subject === subject && String(a.name).trim().toLowerCase() === n).length : 0;
+  return { kind: prior > 0 ? 'repeat' : 'first', no: prior + 1 };
+}

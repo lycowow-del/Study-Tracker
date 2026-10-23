@@ -34,3 +34,5 @@ textarea{width:100%;min-height:54px;background:#1b2025;color:var(--tx);border:1p
 input[type=date],input[type=color]{background:#1b2025;color:var(--tx);border:1px solid var(--line);border-radius:5px}
 @media(max-width:800px){.row{grid-template-columns:20px 34px 1fr 28px 28px}.row .link{grid-column:2/4}}
 .scr input{width:64px}.tr-topic td{color:var(--ac);font-weight:700;padding-top:10px}
+.form{display:grid;gap:8px}.form label{display:grid;gap:2px;color:var(--mut)}.frow{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.form input[type=number]{width:90px}.sub td{color:var(--mut);padding-left:24px}

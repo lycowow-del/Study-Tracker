@@ -48,3 +48,34 @@ const sm = new Map([['r1|g', { total: 10, correct: 5 }], ['r2|g', { total: 12, c
 assert.equal(hitsFor('g', [r1, r2], sm).length, 2); assert.equal(hitsFor('g', [r1, r2], sm).at(-1).round.id, 'r2', 'latest round wins');
 assert.equal(hitsFor('h', [r1, r2], sm).length, 0, 'total 0 = not screened');
 console.log('PASS: package 3 tests');
+// ---- Package 4 ----
+import { validateRow, rowStats, overall, validateAssessment, signature, attemptInfo } from '../js/model.js';
+assert.deepEqual(validateRow({ mode: 'count', correct: '7', total: '10', unanswered: '' }), { ok: true, row: { mode: 'count', correct: 7, total: 10, unanswered: 0 } });
+for (const r of [{ mode: 'count', correct: '8', total: '10', unanswered: '3' }, { mode: 'count', correct: '1', total: '0', unanswered: '' }, { mode: 'count', correct: '2.5', total: '5', unanswered: '' },
+  { mode: 'count', correct: '2', total: '5', unanswered: 'x' }, { mode: 'pct', pct: '101' }, { mode: 'pct', pct: '' }, { mode: 'pct', pct: '-5' }]) assert.equal(validateRow(r).ok, false, JSON.stringify(r));
+assert.deepEqual(validateRow({ mode: 'pct', pct: '82.5' }), { ok: true, row: { mode: 'pct', pct: 82.5 } });
+const st = rowStats({ mode: 'count', correct: 6, total: 10, unanswered: 2 });
+assert.equal(st.score, 60); assert.equal(st.accuracy, 75); assert.equal(st.incorrect, 2);
+assert.equal(rowStats({ mode: 'count', correct: 0, total: 5, unanswered: 5 }).accuracy, null, 'nothing attempted');
+const rowsMix = [{ mode: 'count', correct: 6, total: 10, unanswered: 2 }, { mode: 'count', correct: 9, total: 10, unanswered: 0 }, { mode: 'pct', pct: 50 }];
+const ov = overall(rowsMix);
+assert.equal(ov.C, 15); assert.equal(ov.T, 20); assert.equal(ov.U, 2); assert.equal(ov.score, 75); assert.equal(ov.nUnknown, 1); assert.equal(ov.mode, 'weighted');
+assert(Math.abs(ov.accuracy - 100 * 15 / 18) < 1e-9);
+const onlyPct = overall([{ mode: 'pct', pct: 80 }, { mode: 'pct', pct: 60 }]); assert.equal(onlyPct.mode, 'unweighted'); assert.equal(onlyPct.score, 70);
+const base = { name: 'Pre-board 1', date: '2026-10-23', minutes: '90', expected: '70' };
+const rws = rowsMix.map((r, i) => ({ groupId: 'g' + i, ...r }));
+assert.equal(validateAssessment(base, rws, {}).ok, true);
+assert.equal(validateAssessment({ ...base, name: ' ' }, rws, {}).ok, false);
+assert.equal(validateAssessment(base, [], {}).ok, false, 'breakdown required');
+assert.equal(validateAssessment({ ...base, expected: '120' }, rws, {}).ok, false);
+assert.equal(validateAssessment({ ...base, date: '23/10/2026' }, rws, {}).ok, false);
+assert.equal(validateAssessment(base, rws, { a: 3, b: 2 }).ok, true, '5 <= 3 wrong + 2 unanswered');
+assert.equal(validateAssessment(base, rws, { a: 4, b: 2 }).ok, false, '6 > 5');
+assert.equal(validateAssessment(base, [rws[0], { ...rws[1], groupId: 'g0' }], {}).ok, false, 'duplicate subtopic');
+const A = { subject: 'FAR', name: 'Pre-Board 1', date: '2026-10-23' };
+assert.equal(signature(A, rws), signature({ ...A, name: ' pre-board 1 ' }, [...rws].reverse()), 'order/case insensitive');
+assert.notEqual(signature(A, rws), signature({ ...A, date: '2026-10-24' }, rws));
+const prior = [{ subject: 'FAR', name: 'pre-board 1' }, { subject: 'FAR', name: 'Quiz 2' }, { subject: 'TAX', name: 'Pre-board 1' }];
+assert.deepEqual(attemptInfo('FAR', 'Pre-Board 1', prior), { kind: 'repeat', no: 2 });
+assert.deepEqual(attemptInfo('FAR', 'New one', prior), { kind: 'first', no: 1 }); assert.deepEqual(attemptInfo('FAR', '', prior), { kind: 'first', no: 1 });
+console.log('PASS: package 4 tests');

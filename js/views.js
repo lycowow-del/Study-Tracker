@@ -1,7 +1,7 @@
 import { h, toast, report } from './ui.js';
 import * as db from './db.js';
 import { SUBJECTS, progress, kidsOf, filesUnder, markRemoved, restore, nextOrder, daysLeft } from './model.js';
-const APP_VERSION = '0.3.0 (Package 3)';
+const APP_VERSION = '0.4.0 (Package 4)';
 const STATUSES = ['Core', 'Optional', 'Visitor', 'Gap', 'Reserved'];
 const bar = p => h('div', { class: 'bar' }, h('i', { style: `width:${p.pct}%` }));
 const ask = (m, d = '') => { const v = prompt(m, d); return v && v.trim() ? v.trim() : null; };
@@ -100,6 +100,7 @@ export async function settings(root) {
   const meta = Object.fromEntries((await db.all('meta')).map(m => [m.key, m.value]));
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
   const logs = (await db.all('errorLog')).reverse(), flags = (await db.all('flags')).sort((a, b) => a.order - b.order), nodes = await db.all('nodes');
+  const types = await db.assessTypes(), cats = await db.errCats(), goneAs = (await db.all('assessments')).filter(a => a.removedAt);
   const cfg = await db.screenCfg(), goneRounds = (await db.all('rounds')).filter(r => r.removedAt);
   const again = async () => { root.replaceChildren(); await settings(root); };
   const guard = fn => async () => { try { await fn(); await again(); } catch (e) { report(e, 'settings'); } };
@@ -123,6 +124,16 @@ export async function settings(root) {
       h('td', {}, parentOk ? h('button', { onclick: guard(() => db.putMany('nodes', restore(nodes, n.id))) }, 'Restore') : h('span', { class: 'mut' }, 'restore parent first'), ' ',
         h('button', { onclick: guard(async () => { if (confirm(`Permanently delete "${n.name}"${part.length > 1 ? ` and ${part.length - 1} item(s) inside` : ''}, with their ticks and comments? This cannot be undone.`)) for (const x of part) { await db.del('nodes', x.id); await db.del('progress', x.id); } }) }, 'Delete permanently')));
   };
+  const listEd = (title, key, items) => h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, title),
+    items.map(it => {
+      const i = h('input', { type: 'text', value: it.name, 'aria-label': title });
+      i.addEventListener('change', guard(async () => { const n = i.value.trim(); if (n) await db.put('settings', { key, value: items.map(x => x.id === it.id ? { ...x, name: n } : x) }); }));
+      return h('div', { class: 'tool' }, i, h('button', { onclick: guard(async () => { if (items.length > 1 && confirm(`Delete "${it.name}"? Existing entries keep their data but show it as removed.`)) await db.put('settings', { key, value: items.filter(x => x.id !== it.id) }); }) }, 'Delete'));
+    }),
+    h('button', { onclick: guard(async () => { const v = ask('New name'); if (v) await db.put('settings', { key, value: [...items, { id: key[0] + Date.now().toString(36), name: v }] }); }) }, '+ Add'));
+  const asRow = a => h('tr', {}, h('td', {}, `${a.subject} assessment: ${a.name} (${a.date})`), h('td', {}, (a.removedAt || '').slice(0, 10)),
+    h('td', {}, h('button', { onclick: guard(() => db.put('assessments', { ...a, removedAt: null })) }, 'Restore'), ' ',
+      h('button', { onclick: guard(async () => { if (confirm(`Permanently delete "${a.name}" and its breakdown? This cannot be undone.`)) await db.purgeAssessment(a.id); }) }, 'Delete permanently')));
   const cutRow = (label, key, min, max) => {
     const i = h('input', { type: 'number', min, max, value: cfg[key], style: 'width:80px' });
     i.addEventListener('change', guard(async () => {
@@ -144,6 +155,9 @@ export async function settings(root) {
       h('button', { onclick: guard(async () => { const v = ask('New flag name'); if (v) await db.put('flags', { id: 'f' + Date.now().toString(36), name: v, color: '#8b949e', order: flags.length }); }) }, '+ Add flag')),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Recently removed (${gone.length})`),
       gone.length ? h('table', {}, gone.map(goneRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
+    listEd('Assessment types', 'assessTypes', types), listEd('Error categories', 'errCats', cats),
+    h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Removed assessments (${goneAs.length})`),
+      goneAs.length ? h('table', {}, goneAs.map(asRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, 'Screening cut-offs'),
       cutRow('Weak below (%)', 'weakBelow', 1, 100), cutRow('Strong from (%)', 'strongFrom', 1, 100), cutRow('Minimum questions for a reliable score', 'minQ', 1, 1000)),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Removed screening rounds (${goneRounds.length})`),
