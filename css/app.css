@@ -33,3 +33,4 @@ button{cursor:pointer}button:hover{border-color:var(--ac)}
 textarea{width:100%;min-height:54px;background:#1b2025;color:var(--tx);border:1px solid var(--line);border-radius:5px;padding:6px;font:inherit}
 input[type=date],input[type=color]{background:#1b2025;color:var(--tx);border:1px solid var(--line);border-radius:5px}
 @media(max-width:800px){.row{grid-template-columns:20px 34px 1fr 28px 28px}.row .link{grid-column:2/4}}
+.scr input{width:64px}.tr-topic td{color:var(--ac);font-weight:700;padding-top:10px}

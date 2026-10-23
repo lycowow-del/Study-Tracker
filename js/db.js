@@ -1,5 +1,5 @@
-import { seedNodes, SUBJECTS, DEFAULT_FLAGS } from './model.js';
-const NAME = 'cpale-tracker', VERSION = 2;
+import { seedNodes, SUBJECTS, DEFAULT_FLAGS, DEFAULT_SCREEN } from './model.js';
+const NAME = 'cpale-tracker', VERSION = 3;
 // Ordered migrations: each adds structure only and never deletes user data.
 const MIGRATIONS = { 1: db => {
   db.createObjectStore('meta', { keyPath: 'key' });
@@ -7,7 +7,8 @@ const MIGRATIONS = { 1: db => {
   db.createObjectStore('progress', { keyPath: 'id' });
   db.createObjectStore('errorLog', { keyPath: 'id', autoIncrement: true });
 },
-2: db => { for (const n of ['subjects', 'nodes', 'flags']) db.createObjectStore(n, { keyPath: 'id' }); } };
+2: db => { for (const n of ['subjects', 'nodes', 'flags', 'rounds', 'screenings']) db.createObjectStore(n, { keyPath: 'id' }); },
+3: db => { for (const n of ['rounds', 'screenings']) db.createObjectStore(n, { keyPath: 'id' }); } };
 let db;
 const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 const st = (n, m = 'readonly') => db.transaction(n, m).objectStore(n);
@@ -30,6 +31,7 @@ export const putMany = (n, arr) => new Promise((res, rej) => {
   const t = db.transaction(n, 'readwrite'), s = t.objectStore(n);
   arr.forEach(v => s.put(v)); t.oncomplete = () => res(); t.onerror = t.onabort = () => rej(t.error);
 });
+export const screenCfg = async () => ({ ...DEFAULT_SCREEN, ...((await get('settings', 'screening')) || {}) });
 // One-time, idempotent seed of FAR + subjects + flags (deterministic ids; never touches progress).
 export async function seed() {
   if (await get('meta', 'seeded2')) return;
@@ -49,6 +51,6 @@ export async function logError(e, ctx = '') {
 }
 export async function exportAll() {
   const o = { app: 'cpale-tracker', exportedAt: new Date().toISOString() };
-  for (const n of ['meta', 'settings', 'progress', 'errorLog', 'subjects', 'nodes', 'flags']) o[n] = await all(n);
+  for (const n of ['meta', 'settings', 'progress', 'errorLog', 'subjects', 'nodes', 'flags', 'rounds', 'screenings']) o[n] = await all(n);
   return o;
 }

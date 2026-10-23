@@ -64,3 +64,38 @@ export function daysLeft(date, now = new Date()) {
   const t = new Date(date + 'T00:00:00'), n = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((t - n) / 864e5);
 }
+
+// ---- Package 3: screening ----
+export const DEFAULT_SCREEN = { weakBelow: 85, strongFrom: 92, minQ: 10 };
+// Subtopic groups that hold at least one counted file (Core/Visitor/Gap), in syllabus order.
+export function screenGroups(nodes, subject) {
+  const kids = kidsOf(nodes.filter(n => n.subject === subject)), out = [];
+  for (const t of kids.get('root:' + subject) || []) for (const g of kids.get(t.id) || []) {
+    if (g.kind !== 'group') continue;
+    const files = (kids.get(g.id) || []).filter(f => f.kind === 'file' && COUNTED.has(f.status));
+    if (files.length) out.push({ topic: t, group: g, files, size: files.length });
+  }
+  return out;
+}
+export function validateEntry(cs, ts) {
+  const ok = s => /^\d+$/.test(String(s).trim());
+  if (!ok(cs) || !ok(ts)) return { ok: false, msg: 'Enter whole numbers only.' };
+  const correct = +cs, total = +ts;
+  if (total < 1) return { ok: false, msg: 'Total must be at least 1.' };
+  if (correct > total) return { ok: false, msg: 'Correct cannot exceed total.' };
+  return { ok: true, correct, total };
+}
+export const scoreOf = (c, t) => (100 * c) / t;
+export const band = (sc, cfg) => sc < cfg.weakBelow ? 'Weak' : sc >= cfg.strongFrom ? 'Strong' : 'Developing';
+export const isReliable = (total, cfg) => total >= cfg.minQ;
+// Rounds must be sorted oldest -> newest. Returns rounds that have data for the group.
+export function hitsFor(groupId, rounds, scr) {
+  const out = [];
+  for (const r of rounds) { const s = scr.get(r.id + '|' + groupId); if (s && s.total > 0) out.push({ round: r, rec: s }); }
+  return out;
+}
+// weight = (strongFrom - score) x content size (counted files), zero at or above Strong.
+export function allocate(rows, hours, strongFrom) {
+  const w = rows.map(r => Math.max(0, strongFrom - r.score) * r.size), sum = w.reduce((a, b) => a + b, 0);
+  return new Map(rows.map((r, i) => [r.id, hours > 0 && sum > 0 ? hours * w[i] / sum : 0]));
+}

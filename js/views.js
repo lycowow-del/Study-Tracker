@@ -1,11 +1,13 @@
 import { h, toast, report } from './ui.js';
 import * as db from './db.js';
 import { SUBJECTS, progress, kidsOf, filesUnder, markRemoved, restore, nextOrder, daysLeft } from './model.js';
-const APP_VERSION = '0.2.0 (Package 2)';
+const APP_VERSION = '0.3.0 (Package 3)';
 const STATUSES = ['Core', 'Optional', 'Visitor', 'Gap', 'Reserved'];
 const bar = p => h('div', { class: 'bar' }, h('i', { style: `width:${p.pct}%` }));
 const ask = (m, d = '') => { const v = prompt(m, d); return v && v.trim() ? v.trim() : null; };
 let curSubj = 'FAR';
+export const getSubj = () => curSubj;
+export const setSubj = s => { curSubj = s; };
 
 export async function dashboard(root) {
   root.append(h('h1', {}, 'Command Center'), h('p', { class: 'mut' }, 'Placeholder panels. Real indicators arrive in later packages.'));
@@ -98,6 +100,7 @@ export async function settings(root) {
   const meta = Object.fromEntries((await db.all('meta')).map(m => [m.key, m.value]));
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
   const logs = (await db.all('errorLog')).reverse(), flags = (await db.all('flags')).sort((a, b) => a.order - b.order), nodes = await db.all('nodes');
+  const cfg = await db.screenCfg(), goneRounds = (await db.all('rounds')).filter(r => r.removedAt);
   const again = async () => { root.replaceChildren(); await settings(root); };
   const guard = fn => async () => { try { await fn(); await again(); } catch (e) { report(e, 'settings'); } };
   const doExport = async () => {
@@ -120,6 +123,18 @@ export async function settings(root) {
       h('td', {}, parentOk ? h('button', { onclick: guard(() => db.putMany('nodes', restore(nodes, n.id))) }, 'Restore') : h('span', { class: 'mut' }, 'restore parent first'), ' ',
         h('button', { onclick: guard(async () => { if (confirm(`Permanently delete "${n.name}"${part.length > 1 ? ` and ${part.length - 1} item(s) inside` : ''}, with their ticks and comments? This cannot be undone.`)) for (const x of part) { await db.del('nodes', x.id); await db.del('progress', x.id); } }) }, 'Delete permanently')));
   };
+  const cutRow = (label, key, min, max) => {
+    const i = h('input', { type: 'number', min, max, value: cfg[key], style: 'width:80px' });
+    i.addEventListener('change', guard(async () => {
+      const n = { ...cfg, [key]: Number(i.value) };
+      if (!Number.isFinite(n[key]) || n[key] < min || n[key] > max || n.weakBelow >= n.strongFrom || !Number.isInteger(n.minQ)) { toast('Invalid value. Weak must be below Strong, and the minimum must be a whole number of at least 1.', 'err'); return; }
+      await db.put('settings', { key: 'screening', ...n });
+    }));
+    return h('div', { class: 'tool' }, label, i);
+  };
+  const roundRow = r => h('tr', {}, h('td', {}, `${r.subject} round: ${r.name} (${r.date})`), h('td', {}, (r.removedAt || '').slice(0, 10)),
+    h('td', {}, h('button', { onclick: guard(() => db.put('rounds', { ...r, removedAt: null })) }, 'Restore'), ' ',
+      h('button', { onclick: guard(async () => { if (confirm(`Permanently delete round "${r.name}" and its scores? This cannot be undone.`)) { for (const s of (await db.all('screenings')).filter(s => s.roundId === r.id)) await db.del('screenings', s.id); await db.del('rounds', r.id); } }) }, 'Delete permanently')));
   root.append(h('h1', {}, 'Settings'),
     h('div', { class: 'panel' }, h('h2', {}, 'Storage'),
       h('div', {}, `App version: ${APP_VERSION}`), h('div', {}, `Database schema version: ${meta.schemaVersion ?? '?'}`),
@@ -129,6 +144,10 @@ export async function settings(root) {
       h('button', { onclick: guard(async () => { const v = ask('New flag name'); if (v) await db.put('flags', { id: 'f' + Date.now().toString(36), name: v, color: '#8b949e', order: flags.length }); }) }, '+ Add flag')),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Recently removed (${gone.length})`),
       gone.length ? h('table', {}, gone.map(goneRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
+    h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, 'Screening cut-offs'),
+      cutRow('Weak below (%)', 'weakBelow', 1, 100), cutRow('Strong from (%)', 'strongFrom', 1, 100), cutRow('Minimum questions for a reliable score', 'minQ', 1, 1000)),
+    h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Removed screening rounds (${goneRounds.length})`),
+      goneRounds.length ? h('table', {}, goneRounds.map(roundRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Error log (${logs.length})`),
       h('div', { class: 'tool' }, h('button', { onclick: guard(async () => { if (confirm('Clear the error log? This cannot be undone.')) await db.clear('errorLog'); }) }, 'Clear log'),
         h('button', { onclick: () => setTimeout(() => { throw new Error('Test error (deliberate)'); }) }, 'Trigger test error')),

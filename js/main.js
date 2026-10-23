@@ -1,7 +1,8 @@
 import * as db from './db.js';
 import { h, toast, report } from './ui.js';
 import { dashboard, syllabus, settings } from './views.js';
-const NAV = [['dashboard', 'Command Center', dashboard], ['syllabus', 'Syllabus', syllabus], ['screening', 'Screening', 0, 3], ['assessments', 'Assessments', 0, 4],
+import { screening } from './screening.js';
+const NAV = [['dashboard', 'Command Center', dashboard], ['syllabus', 'Syllabus', syllabus], ['screening', 'Screening', screening], ['assessments', 'Assessments', 0, 4],
   ['data', 'Data Management', 0, 5], ['analytics', 'Analytics', 0, 6], ['tools', 'Study Tools', 0, 8], ['planner', 'Planner', 0, 9], ['settings', 'Settings', settings]];
 addEventListener('error', e => report(e.error || e.message, 'window'));
 addEventListener('unhandledrejection', e => report(e.reason, 'promise'));

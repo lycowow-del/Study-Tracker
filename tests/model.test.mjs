@@ -27,3 +27,24 @@ assert.equal(nextOrder(a, null, 'FAR'), 1 + Math.max(...a.filter(n => !n.parent)
 assert.equal(daysLeft(''), null); assert.equal(daysLeft('2026-10-30', new Date(2026, 9, 23, 15)), 7);
 assert.equal(daysLeft('2026-10-23', new Date(2026, 9, 23, 23)), 0); assert(daysLeft('2026-10-01', new Date(2026, 9, 23)) < 0);
 console.log('PASS: model tests', { files: items.length, nodes: a.length });
+// ---- Package 3 ----
+import { DEFAULT_SCREEN, screenGroups, validateEntry, scoreOf, band, isReliable, hitsFor, allocate } from '../js/model.js';
+const cfg = DEFAULT_SCREEN;
+assert.deepEqual(cfg, { weakBelow: 85, strongFrom: 92, minQ: 10 });
+assert.equal(screenGroups(seedNodes(items), 'FAR').length, 31, '31 screenable FAR groups (verified against the source index)');
+assert.equal(screenGroups(seedNodes(items), 'AFAR').length, 0);
+assert.equal(band(scoreOf(849, 1000), cfg), 'Weak'); assert.equal(band(scoreOf(17, 20), cfg), 'Developing'); // 85 exactly
+assert.equal(band(scoreOf(919, 1000), cfg), 'Developing'); assert.equal(band(scoreOf(23, 25), cfg), 'Strong'); // 92 exactly
+assert.equal(isReliable(9, cfg), false); assert.equal(isReliable(10, cfg), true);
+for (const [c, t] of [['', '5'], ['x', '5'], ['3', '0'], ['6', '5'], ['-1', '5'], ['2.5', '5']]) assert.equal(validateEntry(c, t).ok, false, `${c}/${t}`);
+assert.deepEqual(validateEntry('3', '5'), { ok: true, correct: 3, total: 5 });
+const al = allocate([{ id: 'A', score: 60, size: 5 }, { id: 'B', score: 80, size: 4 }, { id: 'C', score: 95, size: 3 }], 10, 92);
+assert(Math.abs(al.get('A') - 160 / 208 * 10) < 1e-9 && Math.abs(al.get('B') - 48 / 208 * 10) < 1e-9 && al.get('C') === 0, 'worked example');
+assert(Math.abs([...al.values()].reduce((a, b) => a + b, 0) - 10) < 1e-9, 'sums to hours');
+assert.equal([...allocate([{ id: 'X', score: 95, size: 2 }], 10, 92).values()][0], 0, 'all strong -> 0');
+assert.equal([...allocate([{ id: 'X', score: 50, size: 2 }], NaN, 92).values()][0], 0, 'no hours -> 0');
+const r1 = { id: 'r1' }, r2 = { id: 'r2' };
+const sm = new Map([['r1|g', { total: 10, correct: 5 }], ['r2|g', { total: 12, correct: 9 }], ['r1|h', { total: 0, correct: 0 }]]);
+assert.equal(hitsFor('g', [r1, r2], sm).length, 2); assert.equal(hitsFor('g', [r1, r2], sm).at(-1).round.id, 'r2', 'latest round wins');
+assert.equal(hitsFor('h', [r1, r2], sm).length, 0, 'total 0 = not screened');
+console.log('PASS: package 3 tests');
