@@ -22,7 +22,7 @@ async function route() {
 }
 addEventListener('hashchange', route);
 (async () => {
-  try { await db.init(); } catch (e) { toast('Storage unavailable: ' + e.message, 'err'); }
+  try { await db.init(); await db.seed(); } catch (e) { toast('Storage unavailable: ' + e.message, 'err'); }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   route();
 })();
