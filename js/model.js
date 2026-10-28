@@ -101,7 +101,12 @@ export function allocate(rows, hours, strongFrom) {
 }
 
 // ---- Package 4: assessments ----
-export const DEFAULT_TYPES = [{ id: 't-quiz', name: 'School/RC quiz' }, { id: 't-preboard', name: 'Pre-board / mock exam' }, { id: 't-practice', name: 'Practice set' }, { id: 't-drill', name: 'Theory/problem-solving drill' }];
+export const DEFAULT_TYPES = [{ id: 't-quiz', name: 'School/RC quiz', activity: 'Quiz' }, { id: 't-preboard', name: 'Pre-board / mock exam', activity: 'Mock exam' }, { id: 't-practice', name: 'Practice set', activity: 'Problem drill' }, { id: 't-drill', name: 'Theory/problem-solving drill', activity: 'Problem drill' }];
+// ---- Package 8: study tool registry (a tool is an assessment type plus settings; the scoring engine is always manual entry) ----
+export const ACTIVITIES = ['Quiz', 'Problem drill', 'Flashcards', 'Mock exam', 'Recall session', 'Other'];
+export const normTool = t => ({ purpose: '', activity: 'Quiz', entry: 'both', countsTowardMastery: true, trackTime: true, enabled: true, ...t, subjects: Array.isArray(t.subjects) ? t.subjects : [] });
+// Tools offered when logging: enabled and valid for the subject; the entry's current tool is always kept so old entries still display.
+export const toolsFor = (tools, subject, currentId = '') => tools.filter(t => t.id === currentId || (t.enabled && (!t.subjects.length || t.subjects.includes(subject))));
 export const DEFAULT_ERRCATS = [{ id: 'e-concept', name: 'Concept gap' }, { id: 'e-calc', name: 'Computation or careless error' }, { id: 'e-misread', name: 'Misread the question' }, { id: 'e-time', name: 'Ran out of time' }];
 // A breakdown row is {mode:'count', correct, total, unanswered} or {mode:'pct', pct}.
 export function validateRow(r) {
@@ -150,3 +155,7 @@ export function attemptInfo(subject, name, list) {
   const prior = n ? list.filter(a => a.subject === subject && String(a.name).trim().toLowerCase() === n).length : 0;
   return { kind: prior > 0 ? 'repeat' : 'first', no: prior + 1 };
 }
+
+// ---- Local calendar day helpers (dates in this app are YYYY-MM-DD in the user's own timezone) ----
+export const localISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const todayNum = (now = new Date()) => Math.floor(Date.parse(localISO(now) + 'T00:00:00Z') / 864e5);

@@ -1,7 +1,8 @@
 import { h, toast, report } from './ui.js';
 import * as db from './db.js';
 import { SUBJECTS, progress, kidsOf, filesUnder, markRemoved, restore, nextOrder, daysLeft } from './model.js';
-const APP_VERSION = '0.4.0 (Package 4)';
+import { APP_LABEL as APP_VERSION } from './version.js';
+import { pwaPanel } from './pwa.js';
 const STATUSES = ['Core', 'Optional', 'Visitor', 'Gap', 'Reserved'];
 const bar = p => h('div', { class: 'bar' }, h('i', { style: `width:${p.pct}%` }));
 const ask = (m, d = '') => { const v = prompt(m, d); return v && v.trim() ? v.trim() : null; };
@@ -100,7 +101,7 @@ export async function settings(root) {
   const meta = Object.fromEntries((await db.all('meta')).map(m => [m.key, m.value]));
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false;
   const logs = (await db.all('errorLog')).reverse(), flags = (await db.all('flags')).sort((a, b) => a.order - b.order), nodes = await db.all('nodes');
-  const types = await db.assessTypes(), cats = await db.errCats(), goneAs = (await db.all('assessments')).filter(a => a.removedAt);
+  const cfgA = await db.analyticsCfg(), types = await db.assessTypes(), cats = await db.errCats(), goneAs = (await db.all('assessments')).filter(a => a.removedAt);
   const cfg = await db.screenCfg(), goneRounds = (await db.all('rounds')).filter(r => r.removedAt);
   const again = async () => { root.replaceChildren(); await settings(root); };
   const guard = fn => async () => { try { await fn(); await again(); } catch (e) { report(e, 'settings'); } };
@@ -108,7 +109,7 @@ export async function settings(root) {
     try {
       const b = new Blob([JSON.stringify(await db.exportAll(), null, 2)], { type: 'application/json' });
       const a = h('a', { href: URL.createObjectURL(b), download: `cpale-tracker-${new Date().toISOString().slice(0, 10)}.json` });
-      document.body.append(a); a.click(); a.remove(); toast('Exported');
+      document.body.append(a); a.click(); a.remove(); await db.markBackup(); toast('Exported');
     } catch (e) { report(e, 'export'); }
   };
   const flagRow = f => {
@@ -134,6 +135,15 @@ export async function settings(root) {
   const asRow = a => h('tr', {}, h('td', {}, `${a.subject} assessment: ${a.name} (${a.date})`), h('td', {}, (a.removedAt || '').slice(0, 10)),
     h('td', {}, h('button', { onclick: guard(() => db.put('assessments', { ...a, removedAt: null })) }, 'Restore'), ' ',
       h('button', { onclick: guard(async () => { if (confirm(`Permanently delete "${a.name}" and its breakdown? This cannot be undone.`)) await db.purgeAssessment(a.id); }) }, 'Delete permanently')));
+  const aRow = (label, key, min, max, int) => {
+    const i = h('input', { type: 'number', min, max, step: int ? 1 : 'any', value: cfgA[key], style: 'width:80px' });
+    i.addEventListener('change', guard(async () => {
+      const v = Number(i.value);
+      if (!Number.isFinite(v) || v < min || v > max || (int && !Number.isInteger(v))) { toast(`${label}: enter a ${int ? 'whole ' : ''}number from ${min} to ${max}.`, 'err'); return; }
+      await db.put('settings', { key: 'analytics', ...cfgA, [key]: v });
+    }));
+    return h('div', { class: 'tool' }, label, i);
+  };
   const cutRow = (label, key, min, max) => {
     const i = h('input', { type: 'number', min, max, value: cfg[key], style: 'width:80px' });
     i.addEventListener('change', guard(async () => {
@@ -150,14 +160,17 @@ export async function settings(root) {
     h('div', { class: 'panel' }, h('h2', {}, 'Storage'),
       h('div', {}, `App version: ${APP_VERSION}`), h('div', {}, `Database schema version: ${meta.schemaVersion ?? '?'}`),
       h('div', {}, `Persistent storage: ${persisted ? 'granted' : 'not granted (the browser may still clear data; export backups regularly)'}`),
-      h('div', { class: 'tool' }, h('button', { onclick: doExport }, 'Export data to JSON'), h('span', { class: 'mut' }, 'Interim backup. Import and restore arrive in Package 5.'))),
+      h('div', { class: 'tool' }, h('button', { onclick: doExport }, 'Export data to JSON'), h('span', { class: 'mut' }, 'Full backup. Restore, CSV exports and reset are under Data Management.'))),
+    pwaPanel(),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, 'Flags'), flags.map(flagRow),
       h('button', { onclick: guard(async () => { const v = ask('New flag name'); if (v) await db.put('flags', { id: 'f' + Date.now().toString(36), name: v, color: '#8b949e', order: flags.length }); }) }, '+ Add flag')),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Recently removed (${gone.length})`),
       gone.length ? h('table', {}, gone.map(goneRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
-    listEd('Assessment types', 'assessTypes', types), listEd('Error categories', 'errCats', cats),
+    listEd('Error categories', 'errCats', cats),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Removed assessments (${goneAs.length})`),
       goneAs.length ? h('table', {}, goneAs.map(asRow)) : h('div', { class: 'mut' }, 'Nothing removed.')),
+    h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, 'Analytics settings'), aRow('Fade half-life (days)', 'halfLifeDays', 1, 3650, false), aRow('Repeat attempt weight (0 to 1)', 'repeatFactor', 0, 1, false),
+      aRow('Mastered: minimum questions', 'masteryQ', 1, 10000, true), aRow('Mastered: minimum separate assessments', 'masteryA', 1, 1000, true), aRow('Retention gap (days)', 'retentionDays', 1, 3650, true), aRow('Retention: minimum questions per result', 'retentionMinQ', 1, 10000, true), aRow('Recent window (days)', 'recentDays', 1, 3650, true)),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, 'Screening cut-offs'),
       cutRow('Weak below (%)', 'weakBelow', 1, 100), cutRow('Strong from (%)', 'strongFrom', 1, 100), cutRow('Minimum questions for a reliable score', 'minQ', 1, 1000)),
     h('div', { class: 'panel', style: 'margin-top:10px' }, h('h2', {}, `Removed screening rounds (${goneRounds.length})`),

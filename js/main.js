@@ -1,10 +1,16 @@
 import * as db from './db.js';
 import { h, toast, report } from './ui.js';
-import { dashboard, syllabus, settings } from './views.js';
+import { syllabus, settings } from './views.js';
+import { dashboardPage } from './dashboard.js';
 import { screening } from './screening.js';
 import { assessments } from './assessments.js';
-const NAV = [['dashboard', 'Command Center', dashboard], ['syllabus', 'Syllabus', syllabus], ['screening', 'Screening', screening], ['assessments', 'Assessments', assessments],
-  ['data', 'Data Management', 0, 5], ['analytics', 'Analytics', 0, 6], ['tools', 'Study Tools', 0, 8], ['planner', 'Planner', 0, 9], ['settings', 'Settings', settings]];
+import { dataMgmt, checkReminder } from './data.js';
+import { analyticsPage } from './analytics-view.js';
+import { toolsPage } from './tools.js';
+import { plannerPage } from './planner-view.js';
+import { registerPwa, initOffline } from './pwa.js';
+const NAV = [['dashboard', 'Command Center', dashboardPage], ['syllabus', 'Syllabus', syllabus], ['screening', 'Screening', screening], ['assessments', 'Assessments', assessments],
+  ['data', 'Data Management', dataMgmt], ['analytics', 'Analytics', analyticsPage], ['tools', 'Study Tools', toolsPage], ['planner', 'Planner', plannerPage], ['settings', 'Settings', settings]];
 addEventListener('error', e => report(e.error || e.message, 'window'));
 addEventListener('unhandledrejection', e => report(e.reason, 'promise'));
 const nav = document.getElementById('nav'), main = document.getElementById('main');
@@ -26,5 +32,5 @@ addEventListener('hashchange', route);
 (async () => {
   try { await db.init(); await db.seed(); } catch (e) { toast('Storage unavailable: ' + e.message, 'err'); }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
-  route();
+  route(); checkReminder(); registerPwa(); initOffline();
 })();

@@ -1,8 +1,8 @@
 import { h, toast, report } from './ui.js';
 import * as db from './db.js';
-import { SUBJECTS, screenGroups, validateEntry, scoreOf, band, isReliable, hitsFor, allocate } from './model.js';
+import { localISO, SUBJECTS, screenGroups, validateEntry, scoreOf, band, isReliable, hitsFor, allocate } from './model.js';
 import { getSubj, setSubj } from './views.js';
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localISO();
 const BC = { Weak: '#ff6b6b', Developing: '#ffb454', Strong: '#3ddc84' };
 const pill = b => h('span', { class: 'fl', style: `background:${BC[b]};margin:0` }, b);
 const fmt = x => (+x.toFixed(1)) + '%';
